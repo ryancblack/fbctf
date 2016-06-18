@@ -661,6 +661,12 @@ class Level extends Model {
   ): Awaitable<bool> {
     $db = await self::genDb();
 
+    // We only allow one request to be scored at a time per team to prevent race conditions
+    $lock = fopen(sys_get_temp_dir().'/score_level_lock_'.$team_id, 'w');
+    if (!flock($lock, LOCK_EX)) {
+      return false;
+    }
+
     // Check if team has already scored this level
     $previous_score = await ScoreLog::genPreviousScore($level_id, $team_id, false);
     if ($previous_score) {
@@ -685,6 +691,10 @@ class Level extends Model {
     // Log the score...
     await ScoreLog::genLogValidScore($level_id, $team_id, $points, $level->getType());
 
+    // Release the scoring lock
+    flock($lock, LOCK_UN);
+    fclose($lock);
+
     return true;
   }
 
@@ -694,6 +704,12 @@ class Level extends Model {
     int $team_id,
   ): Awaitable<bool> {
     $db = await self::genDb();
+
+    // We only allow one request to be scored at a time per team to prevent race conditions
+    $lock = fopen(sys_get_temp_dir().'/score_base_lock_'.$team_id, 'w');
+    if (!flock($lock, LOCK_EX)) {
+      return false;
+    }
 
     $level = await self::gen($level_id);
 
@@ -715,6 +731,10 @@ class Level extends Model {
      // Log the score...
     await ScoreLog::genLogValidScore($level_id, $team_id, $points, $level->getType());
 
+    // Release the scoring lock
+    flock($lock, LOCK_UN);
+    fclose($lock);
+
     return true;
   }
 
@@ -724,6 +744,12 @@ class Level extends Model {
     int $team_id,
   ): Awaitable<?string> {
     $db = await self::genDb();
+
+    // We only allow one hint request at a time per team to prevent race conditions
+    $lock = fopen(sys_get_temp_dir().'/hint_lock_'.$team_id, 'w');
+    if (!flock($lock, LOCK_EX)) {
+      return null;
+    }
 
     $level = await self::gen($level_id);
     $penalty = $level->getPenalty();
@@ -751,6 +777,10 @@ class Level extends Model {
 
     // Log the hint
     await HintLog::genLogGetHint($level_id, $team_id, $penalty);
+
+    // Release the hint lock
+    flock($lock, LOCK_UN);
+    fclose($lock);
 
     // Hint!
     return $level->getHint();
